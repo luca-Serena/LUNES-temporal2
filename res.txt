@@ -1,0 +1,26 @@
+LUNES____[     50267]: MIGRATION, migration variable set to 0
+LUNES____[     50267]: MIGRATION is OFF
+LUNES____[     50267]: MFACTOR, migration factor: 1.200000
+LUNES____[     50267]: LOAD, load balancing: 0
+LUNES____[     50267]: LOAD, load balancing is OFF
+LUNES____[     50267]: END_CLOCK, number of steps in the simulation run -> 20000.000000
+LUNES____[     50267]: ACTIVE_PERC, initial percentage of active nodes -> 80
+LUNES____[     50267]: MAX_TTL, maximum time-to-live for messages in the network -> 20
+LUNES____[     50267]: DISSEMINATION, dissemination mode -> 0
+LUNES____[     50267]: BROADCAST_PROB_THRESHOLD, probability of the broadcast dissemination -> 70.000000
+ARTÌS-TS_[     50267]: initialization. ARTÌS version: 2.1.2 "New Kowloon"
+SIMA_____[     50267]: senecaurla bound to port 10200
+#LP [0] HOSTNAME [senecaurla]
+#                      LP[0] STARTED
+#
+#          Generating Simulated Entities from 0 To 499 ...  OK
+#
+# Data format:
+#	column 1:   elapsed time (seconds)
+#	column 2:   timestep
+#	column 3:   number of entities in this LP
+#	column 4:   number of migrating entities (from this LP)
+#	column 5:   local communication ratio (percentage)
+#	column 6:   remote communication ratio (percentage)
+#	column 7:   total number of migrations in this timestep
+#
