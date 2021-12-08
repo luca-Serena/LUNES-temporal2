@@ -25,6 +25,8 @@ void lunes_forward_to_neighbors(hash_node_t *, Msg *, unsigned short, cache_elem
 // LUNES handlers
 void lunes_user_request_event_handler(hash_node_t *, int, Msg *);
 void lunes_user_item_event_handler(hash_node_t *, int, Msg *);
+void lunes_user_tree_event_handler(hash_node_t *, int, Msg *);
+void lunes_user_broken_tree_event_handler(hash_node_t *, int, Msg *);
 void lunes_user_register_event_handler(hash_node_t *);
 void lunes_user_control_handler(hash_node_t *);
 

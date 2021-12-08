@@ -19,7 +19,8 @@
 
 // Model messages definition
 typedef struct _request_msg    RequestMsg; // Requesting chunks
-typedef struct _item_msg	ItemMsg;    //sending chunks
+typedef struct _item_msg	ItemMsg;    // Sending chunks
+typedef struct _tree_msg	TreeMsg;    // Sending Neighbors contacts
 typedef struct _link_msg       LinkMsg;    // Network constructions
 typedef struct _unlink_msg     UnlinkMsg;  // Network constructions
 typedef struct _migr_msg       MigrMsg;    // Migration message
@@ -46,6 +47,20 @@ struct _request_static_part {
 
 struct _request_msg {
     struct  _request_static_part request_static;
+};
+
+
+struct _tree_static_part {
+    char           type;                    // Message type                 
+    int            childId;                   // chunk number
+   // #ifdef DEGREE_DEPENDENT_GOSSIP_SUPPORT
+    unsigned int   num_neighbors;           // Number of neighbors of forwarder
+    //#endif
+};
+//
+
+struct _tree_msg {
+    struct  _tree_static_part tree_static;
 };
 
 
@@ -130,6 +145,7 @@ union msg {
     RequestMsg request;
     MigrMsg    migr;
     ItemMsg    item;
+    TreeMsg	tree;
     UnlinkMsg  unlink;
 };
 /*---------------------------------------------------------------------------*/

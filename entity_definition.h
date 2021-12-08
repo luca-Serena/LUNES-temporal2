@@ -40,10 +40,11 @@ typedef struct hash_data_t {
     int           internal_timer;       // Used to track mining activity
     int	   status;		  // 0 off 1 active 2 applicant 3 holder 
     GHashTable *  state;                // Local state as an hash table (glib) (dynamic part)
-    int	  received;	  	  // 0 not received anything, !=0 received the message, -1 received the message back in the fluff phase
+    int	   received;	  	  // 0 not received anything, !=0 received the message, -1 received the message back in the fluff phase
     unsigned int  num_neighbors;        // Number of SE's neighbors (dynamically updated)
     int	   buffer [50];
-    cache_element cache [20];		
+    cache_element cache [50];
+    int	   treeChildren [5];	//id of the nodes the node is sending messages to	
 } hash_data_t;
 
 #endif /* __ENTITY_DEFINITION_H */

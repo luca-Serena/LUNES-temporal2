@@ -67,7 +67,6 @@ extern float          env_fixed_prob_threshold;     /* Dissemination: fixed prob
 extern int 			  env_perc_active_nodes_;		/* Initial percentage of active node*/
 extern unsigned int   env_probability_function;     /* Probability function for Degree Dependent Gossip */
 extern double         env_function_coefficient;     /* Coefficient of probability function */
-extern int            applicant;                    /* ID of the applicant node*/
 extern int            holder;                       /* ID of the holder node*/
 extern int            env_epoch_steps;              /* Duration of a single epoch*/
 
@@ -222,20 +221,15 @@ void execute_request(double ts, hash_node_t *src, hash_node_t *dest, unsigned sh
         GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
     }
     // Real send
-
 }
 
-void execute_item(double ts, hash_node_t *src, hash_node_t *dest, unsigned short ttl, int item_id, cache_element elem, unsigned int creator) {
+void execute_item(double ts, hash_node_t *src, hash_node_t *dest, int item_id) {
     ItemMsg  msg;
     unsigned int message_size;
 
     // Defining the message type
     msg.item_static.type = 'I';
-
-    msg.item_static.cache      = elem;
     msg.item_static.chunkId    = item_id;
-    msg.item_static.ttl        = ttl;
-    msg.item_static.creator    = creator;
     message_size = sizeof(struct _request_static_part);
 
     // Buffer check
@@ -245,10 +239,44 @@ void execute_item(double ts, hash_node_t *src, hash_node_t *dest, unsigned short
         exit(-1);
     }
 
-    if (ttl > 0){
-        GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
-    }
+    GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
     // Real send
+}
+
+void execute_tree(double ts, hash_node_t *src, hash_node_t *dest,  int child_id) {
+    TreeMsg  msg;
+    unsigned int message_size;
+
+    // Defining the message type
+    msg.tree_static.type = 'T';
+    msg.tree_static.childId    = child_id;
+    message_size = sizeof(struct _tree_static_part);
+
+    // Buffer check
+    if (message_size > BUFFER_SIZE) {
+        fprintf(stdout, "%12.2f FATAL ERROR, the outgoing BUFFER_SIZE is not sufficient!\n", simclock);
+        fflush(stdout);
+        exit(-1);
+    }
+        GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
+}
+
+
+void execute_broken_tree(double ts, hash_node_t *src, hash_node_t *dest) {
+    TreeMsg  msg;
+    unsigned int message_size;
+
+    // Defining the message type
+    msg.tree_static.type = 'B';
+    message_size = sizeof(struct _tree_static_part);
+
+    // Buffer check
+    if (message_size > BUFFER_SIZE) {
+        fprintf(stdout, "%12.2f FATAL ERROR, the outgoing BUFFER_SIZE is not sufficient!\n", simclock);
+        fflush(stdout);
+        exit(-1);
+    }
+        GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
 }
 
 
@@ -308,33 +336,11 @@ void execute_unlink(double ts, hash_node_t *src, hash_node_t *dest) {
 
 
 /****************************************************************************
- *! \brief REQUEST: Upon arrival of a chunk request
- */
-void user_request_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
-    // Calling the appropriate LUNES user level handler
-    lunes_user_request_event_handler(node, forwarder, msg);
-}
-
-
-/****************************************************************************
- *! \brief ITEM: Upon arrival of a chunk 
- */
-void user_item_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
-    // Calling the appropriate LUNES user level handler
-    lunes_user_item_event_handler(node, forwarder, msg);
-}
-
-
-
-/****************************************************************************
  *! \brief LINK: upon arrival of a link request some tasks have to be executed
  */
 void user_link_event_handler(hash_node_t *node, int id) {
 
-    // Adding a new entry in the local state of the registering node
-    //	first entry	= key
-    //	second entry	= value
-    //	note: no duplicates are allowed
+    // Adding a new entry in the local state of the registering node || first entry	= key || second entry = value ||  no duplicates are allowed
     if (add_entity_state_entry(id, id, node->data->key, node) == -1) {
         // Insertion aborted, the key is already in the hash table
         /*fprintf(stdout, "%12.2f node: FATAL ERROR, [%5d] key %d (value %d) is a duplicate and can not be inserted in the hash table of local state\n", simclock, node->data->key, id, id);
@@ -343,7 +349,6 @@ void user_link_event_handler(hash_node_t *node, int id) {
     } else {
    		node->data->num_neighbors++;
    	}
-
     #ifdef AG_DEBUG
     fprintf(stdout, "%12.2f node: [%5d] received a link request from agent [%5d], total received requests: %d\n", simclock, node->data->key, id, g_hash_table_size(node->data->state));
     #endif
@@ -415,18 +420,12 @@ void user_control_handler() {
 
 
     if ((int)simclock > EXECUTION_STEP && (int)simclock % env_epoch_steps == 0 ){   //start of an epoch: chosing each time a new aplicant and holder
-        //chosing applicant node
         int rnd; 
-        do {
-        	rnd = RND_Interval(S, 0, NLP * NSIMULATE);
-            tempNode = hash_lookup(table, rnd);
-        } while ( tempNode->data->status == 0);
-        applicant = tempNode->data->key;
         //choosing holder node
         do {
         	rnd = RND_Interval(S, 0, NLP * NSIMULATE);
             tempNode = hash_lookup(table, rnd);
-        } while ( tempNode->data->status == 0 || tempNode->data->key == applicant);
+        } while ( tempNode->data->status == 0);
     	holder = tempNode->data->key;
     }
 
@@ -455,19 +454,21 @@ void user_model_events_handler(int to, int from, Msg *msg, hash_node_t *node) {
 
     // If the node should perform a DOS attack: not a miner and is an attacker
     switch (msg->type) {
-    // A transaction message
     case 'R':
-        user_request_event_handler(node, from, msg);
+        lunes_user_request_event_handler(node, from, msg);
         break;
     case 'I':
-        user_item_event_handler(node, from, msg);
+        lunes_user_item_event_handler(node, from, msg);
         break;
-
-    // A link message
+    case 'T':
+        lunes_user_tree_event_handler(node, from, msg);
+        break;
+    case 'B':
+        lunes_user_broken_tree_event_handler(node, from, msg);
+        break;
     case 'L':
         user_link_event_handler(node, from);
         break;
-     // A link message
     case 'U':
         user_unlink_event_handler(node, from);
         break;

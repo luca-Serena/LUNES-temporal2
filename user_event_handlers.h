@@ -28,8 +28,6 @@ void user_notify_migration_event_handler();
 void user_notify_ext_migration_event_handler();
 void user_migration_event_handler(hash_node_t *, int, Msg *);
 void user_model_events_handler(int, int, Msg *, hash_node_t *);
-void user_request_event_handler(hash_node_t *, int, Msg *);
-void user_item_event_handler(hash_node_t *, int, Msg *);
 void user_link_event_handler(hash_node_t *, int);
 void user_unlink_event_handler(hash_node_t *, int);
 
@@ -49,7 +47,9 @@ int modify_entity_state_entry(unsigned int, unsigned int, hash_node_t *);
 void execute_link(double, hash_node_t *, hash_node_t *);
 void execute_unlink(double, hash_node_t *, hash_node_t *);
 void execute_request(double, hash_node_t *, hash_node_t *, unsigned short, int, cache_element, unsigned int);
-void execute_item(double, hash_node_t *, hash_node_t *, unsigned short, int, cache_element, unsigned int);
+void execute_tree(double, hash_node_t *, hash_node_t *, int);
+void execute_broken_tree(double, hash_node_t *, hash_node_t *);
+void execute_item(double, hash_node_t *, hash_node_t *, int);
 char *check_and_getenv(char *);
 gpointer hash_table_random_key(GHashTable *);
 
