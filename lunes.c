@@ -74,16 +74,21 @@ extern double		  countSteps;
 
 int numChunks = 50;
 int cacheSize = 40;
-int applicantPerc = 7;
+int applicantPerc = 5;
 int activationPerc = 20;   // on base 10000 
 
 int numChildrenTree = 5;
+int startEmittingItems= 10;  //after n steps of an epoch, the holder start streaming
 
 int tempcountLinks=0;
 int tempcountActive=0;
 int countRequestMessages=0;
 int countTreeMessages=0;
 int countItemMessages=0;
+int counBrokenTreeMessages=0;
+
+int countDelay=0;
+
 
 
 //*************************************FUNCTIONS TO MANAGE THE CACHE*****************************************************
@@ -375,8 +380,10 @@ void lunes_send_item_to_neighbors(hash_node_t *node, int item_id) {
     int i = 0;
     while (i < numChildrenTree) {
         int child = node->data->treeChildren[i];
-        if ( child != -1)
+        if ( child != -1){
             execute_item(simclock + FLIGHT_TIME, hash_lookup(stable, node->data->key), hash_lookup(stable, child), item_id);
+        }
+        i++;
     }
 }
 
@@ -464,14 +471,19 @@ void detach_node (hash_node_t *node){
     }	
     node->data->num_neighbors = 0;
 
-    //cancel the tree links
-    for (int i = 0; i < numChildrenTree; i++){
-        int idChild = node->data->treeChildren[i];
-        if (idChild != -1){
-            execute_broken_tree(simclock + FLIGHT_TIME, node, hash_lookup(table, idChild));
-            node->data->treeChildren[i] = -1;
-        }       
+    //cancel the tree links if applicant
+    if (node->data->status == 2){
+        fprintf(stdout, "detatched %d at %d\n", node->data->key, (int)simclock);
+        for (int i = 0; i < numChildrenTree; i++){
+            int idChild = node->data->treeChildren[i];
+            if (idChild != -1){
+                execute_broken_tree(simclock + FLIGHT_TIME, node, hash_lookup(table, idChild));
+                node->data->treeChildren[i] = -1;
+            }       
+        }
     }
+    node->data->status = 0;
+    //node->data->treeParent = -1;
 } 
 
 
@@ -481,9 +493,7 @@ void lunes_user_control_handler(hash_node_t *node) {
 
 
 	if (simclock == BUILDING_STEP){						//just once: Building graph topology
-        for (int i = 0; i < numChildrenTree; i++){
-            node->data->treeChildren[i] = -1;
-        }
+        //node->data->treeParent = -1;
 		int rnd = RND_Interval(S, 0, 100);
 		if (rnd >= env_perc_active_nodes_){
 			node->data->status = 0;
@@ -512,15 +522,18 @@ void lunes_user_control_handler(hash_node_t *node) {
 
 
     //at the beginning of every epoch
-    if ((int)simclock % env_epoch_steps == 1 && simclock > BUILDING_STEP && node->data->status != 0 && node->data->status != 3){
+    if ((int)simclock % env_epoch_steps == 0 && simclock > BUILDING_STEP && node->data->status != 0 ){
         node->data->status = 1;
+        for (int i = 0; i < numChildrenTree; i++){  //reset tree links
+            node->data->treeChildren[i] = -1;
+        }
         if (RND_Interval(S, 0, 100) < applicantPerc){          //some of the active participant are applicants
             node->data->status = 2;
         }
     }
 
 // at each timestep there is the chance for a node to activate or deactivate 
-    if ((int)simclock > env_max_ttl) {                          
+    if ((int)simclock > env_epoch_steps) {                          
         int rnd = RND_Interval(S, 0, 10000);
         if (node->data->status == 0){               
             if (rnd < activationPerc){                           //1% for an off node to activate
@@ -534,7 +547,6 @@ void lunes_user_control_handler(hash_node_t *node) {
         } 
         else if (node->data->status == 1 || node->data->status == 2){        
             if (rnd < percentage_to_deactivate (activationPerc)){
-                node->data->status = 0;
                 detach_node(node);
             }
         }
@@ -547,12 +559,6 @@ void lunes_user_control_handler(hash_node_t *node) {
     }
 
 
-    //at the first timestep of each epoch
-    if ((int)simclock % env_epoch_steps == 0 && (node->data->status ==2 || node->data->status == 3)){
-        node->data->status = 1;
-    }
-
-
 
 //********************HOLDER BEHAVIOUR***********************************
 
@@ -561,9 +567,10 @@ void lunes_user_control_handler(hash_node_t *node) {
         node->data->status = 3;
     }
 
-    if (simclock >= env_epoch_steps && node->data->key == holder && (int)simclock % env_epoch_steps < numChunks ){
+    if (simclock >= env_epoch_steps && node->data->key == holder &&
+       ((int)simclock % env_epoch_steps >= startEmittingItems &&  (int)simclock % env_epoch_steps < startEmittingItems + numChunks)){  //comprised between modulo 10 and 60
         //send items to the sons
-       // lunes_send_item_to_neighbors(node, (int)simclock % env_epoch_steps);         //at each epoch the holder sends one of the chunks
+        lunes_send_item_to_neighbors(node, (int)simclock % env_epoch_steps - startEmittingItems);         //at each epoch the holder sends one of the chunks
         countChunks++;
     }
     
@@ -572,7 +579,7 @@ void lunes_user_control_handler(hash_node_t *node) {
 
 // *******************APPLICANT BEHAVIOUR***********************************************************
     
-    if (node->data->status == 2 && (int)simclock % env_epoch_steps == 1 && simclock > BUILDING_STEP){  //if the node is applicant ask for the first chunk
+    if (node->data->status == 2 && (int)simclock % env_epoch_steps == 0 && simclock > BUILDING_STEP){  //if the node is applicant ask for the first chunk
         lunes_send_request_to_neighbors(node, 0);
     }
 
@@ -599,10 +606,13 @@ void lunes_user_control_handler(hash_node_t *node) {
     }
 
     if ((int)simclock == env_end_clock - 10 && node->data->key == 4){
-        fprintf (stdout, "A total of %d delivers out of %d chunks. A total of %ld", countDelivers, countChunks, countMessages);
+        fprintf (stdout, "\nA total of %d delivers out of %d chunks. A total of %d requests messages, %d item messages, %d tree messages, %d broken t. messages",
+        countDelivers, countChunks, countRequestMessages, countItemMessages, countTreeMessages, counBrokenTreeMessages);
+        double average_delay = (double)countDelay / countDelivers;
+        fprintf (stdout, "\n The average delay is: %f (total %d)", average_delay, countDelay);
     }
 
-    if (((int)simclock == 1034 || (int)simclock == 1800) && node->data->status != 1 && node->data->status != 0 ){
+    if (((int)simclock == 108 || (int)simclock == 208) && node->data->status != 1 && node->data->status != 0 ){
         fprintf (stdout, "\n node %d with status %d --> ", node->data->key, node->data->status );
         for (int i =0; i< numChildrenTree; i++){
             fprintf(stdout, "%d ", node->data->treeChildren[i]);
@@ -617,13 +627,11 @@ void lunes_user_request_event_handler(hash_node_t *node, int forwarder, Msg *msg
 	if (is_in_cache(node, msg->request.request_static.cache.id) == 0){
         add_into_cache(node, msg->request.request_static.cache);        
     	if (node->data->key == holder){  //if it's the holder node
+            fprintf(stdout, "request receveived from %d at %d\n", msg->request.request_static.creator, (int)simclock);
             int requestedChunk = msg->request.request_static.chunkId;
             if (addChildInTree(node, msg->request.request_static.creator) == -1){
-                //fprintf(stdout, "request receveived from %d\n", msg->request.request_static.creator);
                 lunes_send_tree_to_neighbor(node, msg->request.request_static.creator); 
-            }// else {fprintf(stdout, "hhhh \n");}
-            //lunes_send_request_to_neighbors()
-            //lunes_send_item_to_neighbors(node, requestedChunk);
+            }
     	}
     	else if (node->data->status == 1 || node->data->status == 2){ 
     		lunes_forward_to_neighbors(node, msg,  --(msg->request.request_static.ttl),  msg->request.request_static.cache, msg->request.request_static.chunkId, msg->request.request_static.creator, forwarder);
@@ -637,12 +645,20 @@ void lunes_user_item_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
     if (node->data->status == 2){  //if it's the receiver node
         if (node->data->buffer[msg->item.item_static.chunkId] == 0){
             countDelivers++;
+            int delay = ((int)simclock % env_epoch_steps) - startEmittingItems - msg->item.item_static.chunkId; //timesteps between generation of a message and its reception
+            countDelay += delay;
             node->data->buffer[msg->item.item_static.chunkId] = 1;
             for (int i = 0; i < numChildrenTree; i++){                      //for each possible child, if there is a child in the tree, send it to the child
                 int child_id = node->data->treeChildren[i];
                 if (child_id != -1){
-                    hash_node_t * receiver = hash_lookup(stable, child_id);   
-                    execute_item(simclock + FLIGHT_TIME, node, receiver,msg->item.item_static.chunkId);
+                    hash_node_t * receiver = hash_lookup(stable, child_id);
+                    if (receiver->data->status != 2){                           //assume you can detect in advance that the child node is down
+                        node->data->treeChildren[i] = -1;
+                        fprintf(stdout, "node %d detected the failure of node %d at %d\n", node->data->key, child_id, (int)simclock);
+                    }else{
+                        //fprintf(stdout, "node %d detected the presence of node %d at %d\n", node->data->key, child_id, (int)simclock);
+                        execute_item(simclock + FLIGHT_TIME, node, receiver,msg->item.item_static.chunkId);
+                    }
                 }
             }
         }
@@ -661,6 +677,9 @@ void lunes_user_tree_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
 }
 
 void lunes_user_broken_tree_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
-    countMessages++;
-    lunes_send_request_to_neighbors(node, 0);  //temp! non 0 ma il primo chunk non ricevuto    
+    counBrokenTreeMessages++;  
+    if (node->data->status == 2){
+        lunes_send_request_to_neighbors(node, 0);  //temp! non 0 ma il primo chunk non ricevuto    
+        fprintf(stdout, "rece %d\n", node->data->key);
+    }
 }

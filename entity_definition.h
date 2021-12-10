@@ -44,7 +44,7 @@ typedef struct hash_data_t {
     unsigned int  num_neighbors;        // Number of SE's neighbors (dynamically updated)
     int	   buffer [50];
     cache_element cache [50];
-    int	   treeChildren [5];	//id of the nodes the node is sending messages to	
+    int	   treeChildren [5];	  // id of the children the node is sending messages to
 } hash_data_t;
 
 #endif /* __ENTITY_DEFINITION_H */
