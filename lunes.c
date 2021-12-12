@@ -40,8 +40,6 @@
 /* ************************************************************************ */
 
 FILE *         fp_print_trace;        // File descriptor for simulation trace file
-unsigned short env_max_ttl = MAX_TTL; // TTL of newly created messages
-
 
 /* ************************************************************************ */
 /*          E X T E R N A L     V A R I A B L E S                           */
@@ -72,16 +70,18 @@ extern int            countChunks;
 extern double		  countSteps;
 
 
-int numChunks = 50;
-int cacheSize = 40;
+int numChunks = NUM_CHUNKS;
+int cacheSize = CACHE_SIZE;
 int applicantPerc = 5;
-int activationPerc = 20;   // on base 10000 
+int activationPerc = 0;   // on base 10000 
 
 int numChildrenTree = 5;
 int startEmittingItems= 10;  //after n steps of an epoch, the holder start streaming
 
 int tempcountLinks=0;
 int tempcountActive=0;
+int tempEpochChunksPotential=0;
+int tempEpochChunksReceived=0;
 int countRequestMessages=0;
 int countTreeMessages=0;
 int countItemMessages=0;
@@ -198,36 +198,6 @@ void lunes_real_forward(hash_node_t *node, Msg *msg, unsigned short ttl, cache_e
 
 
     switch (msg->type) {
-    // Request is always disseminated to all neighbors
-    case 'I':
-        g_hash_table_iter_init(&iter, node->data->state);
-        // All neighbors
-        while (g_hash_table_iter_next(&iter, &key, &destination)) {
-            sender   = hash_lookup(stable, node->data->key);             // This node
-            receiver = hash_lookup(table, *(unsigned int *)destination); // The neighbor
-
-            // The original forwarder of this message and its creator are exclueded
-            // from this dissemination
-            if ((receiver->data->key != forwarder) && (receiver->data->key != creator)) {
-                execute_item(simclock + FLIGHT_TIME, sender, receiver,id);
-            }
-        }
-        break;
-
-   /* case 'T':
-        g_hash_table_iter_init(&iter, node->data->state);
-        // All neighbors
-        while (g_hash_table_iter_next(&iter, &key, &destination)) {
-            sender   = hash_lookup(stable, node->data->key);             // This node
-            receiver = hash_lookup(table, *(unsigned int *)destination); // The neighbor
-
-            // The original forwarder of this message and its creator are exclueded
-            // from this dissemination
-            if ((receiver->data->key != forwarder) && (receiver->data->key != creator)) {
-                execute_tree(simclock + FLIGHT_TIME, sender, receiver, ttl, id, elem, creator);
-            }
-        }
-        break;*/
 
     case 'R':
         // Dissemination mode for the forwarded messages (dissemination algorithm)
@@ -452,6 +422,12 @@ void attach_node (hash_node_t *node){
             }
 		}
 	}
+    //managing streaming tree
+    for (int i =0; i<numChildrenTree; i++){
+        node->data->treeChildren[i] = -1;
+        node->data->firstChunk = -1;
+        node->data->lastChunkTime = (int)simclock;
+    }
 	node->data->num_neighbors = connections;
 }  
 
@@ -471,9 +447,10 @@ void detach_node (hash_node_t *node){
     }	
     node->data->num_neighbors = 0;
 
+    /* if we can assume that participant can communicate their failure/way out from the system.
     //cancel the tree links if applicant
     if (node->data->status == 2){
-        fprintf(stdout, "detatched %d at %d\n", node->data->key, (int)simclock);
+        fprintf(stdout, "detatched %d at %d\n", node->data->key, (int)simclock);  //LOG!
         for (int i = 0; i < numChildrenTree; i++){
             int idChild = node->data->treeChildren[i];
             if (idChild != -1){
@@ -481,9 +458,19 @@ void detach_node (hash_node_t *node){
                 node->data->treeChildren[i] = -1;
             }       
         }
-    }
-    node->data->status = 0;
-    //node->data->treeParent = -1;
+    }*/
+
+    //LOG!
+    /*
+    if (node->data->status ==2){
+        fprintf(stdout, "node %d deactivated at %d", node->data->key, (int)simclock); 
+        for (int i = 0; i < numChildrenTree; i++){
+            fprintf(stdout, " %d", node->data->treeChildren[i]);
+        }
+        fprintf(stdout, "\n");
+    }*/
+
+    node->data->status = 0;             //set eventually the node to inactive
 } 
 
 
@@ -527,6 +514,9 @@ void lunes_user_control_handler(hash_node_t *node) {
         for (int i = 0; i < numChildrenTree; i++){  //reset tree links
             node->data->treeChildren[i] = -1;
         }
+        node->data->firstChunk = -1;
+        node->data->lastChunkTime = -1;
+
         if (RND_Interval(S, 0, 100) < applicantPerc){          //some of the active participant are applicants
             node->data->status = 2;
         }
@@ -541,6 +531,7 @@ void lunes_user_control_handler(hash_node_t *node) {
                 attach_node(node);
                 if (RND_Interval(S, 0, 100) < applicantPerc){          //some of the active participant are applicants
                     node->data->status = 2;
+                    //fprintf (stdout, "New applicant %d at %d\n", node->data->key, (int)simclock);  //LOG!
                     lunes_send_request_to_neighbors(node, 0); //temp! 
                 }
             }
@@ -571,7 +562,6 @@ void lunes_user_control_handler(hash_node_t *node) {
        ((int)simclock % env_epoch_steps >= startEmittingItems &&  (int)simclock % env_epoch_steps < startEmittingItems + numChunks)){  //comprised between modulo 10 and 60
         //send items to the sons
         lunes_send_item_to_neighbors(node, (int)simclock % env_epoch_steps - startEmittingItems);         //at each epoch the holder sends one of the chunks
-        countChunks++;
     }
     
     
@@ -587,6 +577,17 @@ void lunes_user_control_handler(hash_node_t *node) {
         for (int i = 0; i < numChunks; i++){
             node->data->buffer[i] = 0;
         }
+        for (int i = 0; i < numChildrenTree; i++){
+            node->data->treeChildren[i] = -1;
+        }
+    }
+
+
+    //if no chunk arrives, it means that the parent in the tree has dead. Make the request again
+    if (node->data->status == 2 && node->data->firstChunk != -1 && (int)simclock  > node->data->lastChunkTime + 1 && (int)simclock % env_epoch_steps < numChunks ){
+        //fprintf(stdout, "recovery mechanism activated by %d at %d chunks %d\n", node->data->key, (int)simclock, node->data->lastChunkTime );  //LOG!
+        lunes_send_request_to_neighbors(node, 1);
+        node->data->lastChunkTime = (int)simclock + 5; // don't send another request until
         for (int i = 0; i < numChildrenTree; i++){
             node->data->treeChildren[i] = -1;
         }
@@ -611,13 +612,28 @@ void lunes_user_control_handler(hash_node_t *node) {
         double average_delay = (double)countDelay / countDelivers;
         fprintf (stdout, "\n The average delay is: %f (total %d)", average_delay, countDelay);
     }
-
-    if (((int)simclock == 108 || (int)simclock == 208) && node->data->status != 1 && node->data->status != 0 ){
-        fprintf (stdout, "\n node %d with status %d --> ", node->data->key, node->data->status );
+    /*
+    if (((int)simclock == 258 || (int)simclock == 264) && node->data->status != 1 && node->data->status != 0 ){
+        fprintf (stdout, "\n node %d with status %d --> ", node->data->key, node->data->status );    //LOG!
         for (int i =0; i< numChildrenTree; i++){
             fprintf(stdout, "%d ", node->data->treeChildren[i]);
         }
         //fprintf (stdout, "h %d at %d with status %d\n", node->data->key, (int)simclock, node->data->status);
+    }*/
+
+
+    if ((int)simclock % (int)env_epoch_steps == (env_epoch_steps - 2) && node->data->status == 2 && simclock > env_epoch_steps){
+        tempEpochChunksPotential += (numChunks - node->data->firstChunk);
+        countChunks += (numChunks - node->data->firstChunk);
+        for (int i =0; i< numChunks; i++){
+            tempEpochChunksReceived += node->data->buffer[i];
+            countDelivers += node->data->buffer[i];
+        }
+    }
+    if ((int)simclock % (int)env_epoch_steps == (env_epoch_steps - 1) && node->data->key == 21){
+        int epoch = (int) simclock / (int)env_epoch_steps;
+        fprintf (stdout, "At epoch %d reception of %d out of %d messages\n", epoch, tempEpochChunksReceived, tempEpochChunksPotential);
+        tempEpochChunksReceived = tempEpochChunksPotential = 0;
     }
 }
 
@@ -627,8 +643,11 @@ void lunes_user_request_event_handler(hash_node_t *node, int forwarder, Msg *msg
 	if (is_in_cache(node, msg->request.request_static.cache.id) == 0){
         add_into_cache(node, msg->request.request_static.cache);        
     	if (node->data->key == holder){  //if it's the holder node
-            fprintf(stdout, "request receveived from %d at %d\n", msg->request.request_static.creator, (int)simclock);
-            int requestedChunk = msg->request.request_static.chunkId;
+            /*if (msg->request.request_static.chunkId != 0){  
+                fprintf (stdout, " node %d reactivated at %d\n", msg->request.request_static.creator, (int)simclock);  //LOG!
+            }*/
+            //fprintf(stdout, "request receveived from %d at %d\n", msg->request.request_static.creator, (int)simclock); //LOG!
+            //int requestedChunk = msg->request.request_static.chunkId;
             if (addChildInTree(node, msg->request.request_static.creator) == -1){
                 lunes_send_tree_to_neighbor(node, msg->request.request_static.creator); 
             }
@@ -643,8 +662,13 @@ void lunes_user_request_event_handler(hash_node_t *node, int forwarder, Msg *msg
 void lunes_user_item_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
     countItemMessages++;
     if (node->data->status == 2){  //if it's the receiver node
-        if (node->data->buffer[msg->item.item_static.chunkId] == 0){
-            countDelivers++;
+        int chunkId = msg->item.item_static.chunkId;
+        if (node->data->buffer[chunkId] == 0){
+            //countDelivers++;
+            if (node->data->firstChunk == -1 || chunkId < node->data->firstChunk){
+                node->data->firstChunk = chunkId;
+            }
+            node->data->lastChunkTime = (int)simclock;
             int delay = ((int)simclock % env_epoch_steps) - startEmittingItems - msg->item.item_static.chunkId; //timesteps between generation of a message and its reception
             countDelay += delay;
             node->data->buffer[msg->item.item_static.chunkId] = 1;
@@ -654,7 +678,7 @@ void lunes_user_item_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
                     hash_node_t * receiver = hash_lookup(stable, child_id);
                     if (receiver->data->status != 2){                           //assume you can detect in advance that the child node is down
                         node->data->treeChildren[i] = -1;
-                        fprintf(stdout, "node %d detected the failure of node %d at %d\n", node->data->key, child_id, (int)simclock);
+                        //fprintf(stdout, "node %d detected the failure of node %d at %d\n", node->data->key, child_id, (int)simclock);  //LOG!
                     }else{
                         //fprintf(stdout, "node %d detected the presence of node %d at %d\n", node->data->key, child_id, (int)simclock);
                         execute_item(simclock + FLIGHT_TIME, node, receiver,msg->item.item_static.chunkId);
@@ -680,6 +704,5 @@ void lunes_user_broken_tree_event_handler(hash_node_t *node, int forwarder, Msg 
     counBrokenTreeMessages++;  
     if (node->data->status == 2){
         lunes_send_request_to_neighbors(node, 0);  //temp! non 0 ma il primo chunk non ricevuto    
-        fprintf(stdout, "rece %d\n", node->data->key);
     }
 }

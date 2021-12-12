@@ -63,6 +63,7 @@ float          env_broadcast_prob_threshold;  // Dissemination: conditional broa
 unsigned int   env_cache_size;                // Cache size of each node
 float          env_fixed_prob_threshold;      // Dissemination: fixed probability, probability threshold
 int            env_perc_active_nodes_;        // Initial percentage of active node
+unsigned short env_max_ttl;                   //
 
 #ifdef DEGREE_DEPENDENT_GOSSIP_SUPPORT
 unsigned int   env_probability_function;      // Probability function for Degree Dependent Gossip
@@ -625,6 +626,9 @@ int main(int argc, char *argv[]) {
                 fprintf(stdout, "\n\n");
                 fprintf(stdout, "### Termination condition reached (%d)\n", tot);
                 fprintf(stdout, "### Clock           %12.2f\n", simclock);
+
+                double reception_rate = (double)countDelivers / (double)countChunks * 100;
+                fprintf (stdout, "A total of %d chunks received out of potential %d chunks (%f perc )\n", countDelivers, countChunks, reception_rate);
                 //fprintf(stdout, "Message received %d times in %d simulations sending %ld messages delivered %ld per epoch. Total steps: %lf, average %lf\n",  countDelivers, countEpochs, countMessages, countMessages/countEpochs, countSteps, countSteps/countDelivers);// / countEpochs);
                 fflush(stdout);
 
