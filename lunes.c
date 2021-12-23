@@ -72,16 +72,23 @@ extern double		  countSteps;
 
 int numChunks = NUM_CHUNKS;
 int cacheSize = CACHE_SIZE;
-int applicantPerc = 5;
-int activationPerc = 0;   // on base 10000 
+int numChildrenTree = NUM_CHILDREN;
 
-int numChildrenTree = 5;
+
+int applicantPerc = 5;
+int activationPerc = 110;   // on base 10000 
 int startEmittingItems= 10;  //after n steps of an epoch, the holder start streaming
 
 int tempcountLinks=0;
 int tempcountActive=0;
 int tempEpochChunksPotential=0;
 int tempEpochChunksReceived=0;
+int tempcountapplicants=0;
+int tempcountcov=0;
+int tempotential=0;
+int tempcountfirst=0;
+int tempCountReqDelay=0;
+
 int countRequestMessages=0;
 int countTreeMessages=0;
 int countItemMessages=0;
@@ -117,11 +124,22 @@ int cache_choose_oldest (hash_node_t *node){
 int is_in_cache (hash_node_t *node, int elemId){
     int res = 0;
     for (int i = 0; i< cacheSize; i++){
-        if (node->data->cache[i].id ==elemId){
+        if (node->data->cache[i].id == elemId){
             res = 1;
             break;
         }
     }
+    return res;
+}
+
+int count_cacheSize (hash_node_t *node){
+    int res = 0;
+    for (int i = 0; i < cacheSize; i++){
+        if (node->data->cache[i].id != 0){
+            res++;
+        }
+    }
+
     return res;
 }
 
@@ -137,7 +155,6 @@ int addChildInTree (hash_node_t *node, int id){
             break;
         }
     }
-
     return res;
 }
 
@@ -281,9 +298,10 @@ void lunes_real_forward(hash_node_t *node, Msg *msg, unsigned short ttl, cache_e
 
             case FIXED_FANOUT:
             	g_hash_table_iter_init (&iter, node->data->state);
+                int number = 4;
             	sender   = hash_lookup(stable, node->data->key);             // This node
 
-            	if (node->data->num_neighbors <= 3) {
+            	if (node->data->num_neighbors <= number) {
             		while (g_hash_table_iter_next(&iter, &key, &destination)) {
     	                receiver = hash_lookup(table, *(unsigned int *)destination); // The neighbor
 
@@ -297,7 +315,6 @@ void lunes_real_forward(hash_node_t *node, Msg *msg, unsigned short ttl, cache_e
             		int count = 0;
 
             		threshold = RND_Interval(S, (double)0, (double)100);
-            		int number = 3;
             		gpointer arr [number];
             		while (count < number){                  
             			destination = hash_table_random_key(node->data->state); 
@@ -362,7 +379,7 @@ void lunes_send_request_to_neighbors(hash_node_t *node, int req_id) {
     // Iterator to scan the whole state hashtable of neighbors
     GHashTableIter iter;
     gpointer       key, destination;
-    cache_element elem = {.timestamp = (int)simclock, .id = RND_Interval(S, 0, 10000000)};     //info to cache the message. Id used to identify the message
+    cache_element elem = {.timestamp = (int)simclock, .id = RND_Interval(S, 1, 100000000)};     //info to cache the message. Id used to identify the message
 
     // All neighbors
     g_hash_table_iter_init(&iter, node->data->state);
@@ -409,8 +426,8 @@ void print_neighbors (hash_node_t *node){
 }
 
 
-void attach_node (hash_node_t *node){
-	int connections = RND_Interval(S, 5,11); //how many connections to establish  #12-19 to get 12 edges per node, #5-11 to get 6 edges per node, #8-15 to get 9 edges per node
+void attach_node (hash_node_t *node, int lower_bound, int upper_bound){
+	int connections = RND_Interval(S, lower_bound, upper_bound); //how many connections to establish  #12-19 to get 12 edges per node, #5-11 to get 6 edges per node, #8-15 to get 9 edges per node
 	int count = 0;
 	while (count < connections){
 		int new_neighbor_id = RND_Interval(S, 0, (NLP*NSIMULATE));        // chose a random node of the graph
@@ -485,12 +502,16 @@ void lunes_user_control_handler(hash_node_t *node) {
 		if (rnd >= env_perc_active_nodes_){
 			node->data->status = 0;
 		}
+        for (int i =0; i< cacheSize; i++){
+            node->data->cache[i].id =0;
+            node->data->cache[i].timestamp=0;
+        }
     }	
 
 	
     // just once: initial graph building
     if (simclock == BUILDING_STEP + 1 && node->data->status != 0){
-        attach_node(node);
+        attach_node(node, 3, 5);
     }
 
 
@@ -528,7 +549,7 @@ void lunes_user_control_handler(hash_node_t *node) {
         if (node->data->status == 0){               
             if (rnd < activationPerc){                           //1% for an off node to activate
                 node->data->status = 1;
-                attach_node(node);
+                attach_node(node, 6, 10);
                 if (RND_Interval(S, 0, 100) < applicantPerc){          //some of the active participant are applicants
                     node->data->status = 2;
                     //fprintf (stdout, "New applicant %d at %d\n", node->data->key, (int)simclock);  //LOG!
@@ -546,7 +567,7 @@ void lunes_user_control_handler(hash_node_t *node) {
 
     //don't let nodes to be without neighbors
     if (node->data->status != 0 && node->data->num_neighbors == 0 && simclock > BUILDING_STEP +2){
-    	attach_node (node);
+    	attach_node (node, 6, 10);
     }
 
 
@@ -554,8 +575,9 @@ void lunes_user_control_handler(hash_node_t *node) {
 //********************HOLDER BEHAVIOUR***********************************
 
 
-    if ((int)simclock % env_epoch_steps == 0 && node->data->key == holder){
+    if ((int)simclock % env_epoch_steps == 0 && node->data->key == holder && simclock > BUILDING_STEP){
         node->data->status = 3;
+        countEpochs++;
     }
 
     if (simclock >= env_epoch_steps && node->data->key == holder &&
@@ -584,10 +606,10 @@ void lunes_user_control_handler(hash_node_t *node) {
 
 
     //if no chunk arrives, it means that the parent in the tree has dead. Make the request again
-    if (node->data->status == 2 && node->data->firstChunk != -1 && (int)simclock  > node->data->lastChunkTime + 1 && (int)simclock % env_epoch_steps < numChunks ){
+    if (node->data->status == 2 && node->data->firstChunk != -1 && (int)simclock > node->data->lastChunkTime + 1 && (int)simclock % env_epoch_steps < numChunks ){
         //fprintf(stdout, "recovery mechanism activated by %d at %d chunks %d\n", node->data->key, (int)simclock, node->data->lastChunkTime );  //LOG!
         lunes_send_request_to_neighbors(node, 1);
-        node->data->lastChunkTime = (int)simclock + 5; // don't send another request until
+        node->data->lastChunkTime = (int)simclock + 10; // don't send another request until
         for (int i = 0; i < numChildrenTree; i++){
             node->data->treeChildren[i] = -1;
         }
@@ -595,22 +617,51 @@ void lunes_user_control_handler(hash_node_t *node) {
 
 
 //***************************TEST*************************************************************
-    if ((int)simclock % 1000 == 0 && simclock > BUILDING_STEP){
+    
+
+    if ((int)simclock % 500 == 0 && simclock > BUILDING_STEP){
         tempcountLinks = tempcountLinks + node->data->num_neighbors;                // temp to delete
         tempcountActive = (node->data->status != 0) ? tempcountActive + 1 : tempcountActive;
     }
 
-    if ((int)simclock % 1000 == 1 && simclock > BUILDING_STEP && node->data->key == 100){
-        fprintf(stdout, "At %d we have %d nodes and %d links active\n", (int)simclock, tempcountActive, tempcountLinks);
+    if ((int)simclock % 500 == 23 && node->data->key == 100){
+        //fprintf(stdout, "At %d we have %d nodes and %d links active\n", (int)simclock, tempcountActive, tempcountLinks);
         tempcountActive = 0;
         tempcountLinks = 0;
     }
+    /*
+    if (simclock == 224){
+        if (node->data->status != 0){
+            tempotential++;
+        }
+        if (node->data->status == 2){
+            tempcountapplicants++;
+        }
+    }
 
+    if (simclock == 225){
+        int l = count_cacheSize(node);
+        tempcountcov += l;
+    }
+
+    if (simclock == 226 && node->data->key == 68){
+        int bacino = tempotential * tempcountapplicants - tempcountapplicants;
+        fprintf(stdout, "reception == %d out of %d", tempcountcov, bacino);
+        fprintf(stdout, ", the percentage is %f\n", (double)tempcountcov / (double)bacino * 100);
+        fprintf(stdout, "messages sent: %d", countfages);
+        fprintf(stdout, " with average delay: %f", (double)tempCountReqDelay / (double)tempcountfirst);
+
+    }
+    */
     if ((int)simclock == env_end_clock - 10 && node->data->key == 4){
         fprintf (stdout, "\nA total of %d delivers out of %d chunks. A total of %d requests messages, %d item messages, %d tree messages, %d broken t. messages",
         countDelivers, countChunks, countRequestMessages, countItemMessages, countTreeMessages, counBrokenTreeMessages);
+        fprintf (stdout, "\nAn average of %.2f delivers out of %.2f chunks. An average of %.2f requests messages, %.2f item messages, %.2f tree messages",
+        (double)countDelivers / countEpochs, (double)countChunks / countEpochs, (double)countRequestMessages / countEpochs, 
+        (double)countItemMessages / countEpochs, (double)countTreeMessages / countEpochs);
         double average_delay = (double)countDelay / countDelivers;
-        fprintf (stdout, "\n The average delay is: %f (total %d)", average_delay, countDelay);
+        double average_crp = (double)countDelivers / countChunks * 100;           // CRP = Chunk Reception Rate
+        fprintf (stdout, "\n The average delay is: %f (total %d), chunk reception rate = %f\n", average_delay, countDelay, average_crp);
     }
     /*
     if (((int)simclock == 258 || (int)simclock == 264) && node->data->status != 1 && node->data->status != 0 ){
@@ -632,7 +683,7 @@ void lunes_user_control_handler(hash_node_t *node) {
     }
     if ((int)simclock % (int)env_epoch_steps == (env_epoch_steps - 1) && node->data->key == 21){
         int epoch = (int) simclock / (int)env_epoch_steps;
-        fprintf (stdout, "At epoch %d reception of %d out of %d messages\n", epoch, tempEpochChunksReceived, tempEpochChunksPotential);
+        fprintf (stdout, "At epoch %d reception of %d out of %d messages\n", epoch, tempEpochChunksReceived, tempEpochChunksPotential); //LOG!
         tempEpochChunksReceived = tempEpochChunksPotential = 0;
     }
 }
@@ -641,6 +692,8 @@ void lunes_user_control_handler(hash_node_t *node) {
 void lunes_user_request_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
     countRequestMessages++;
 	if (is_in_cache(node, msg->request.request_static.cache.id) == 0){
+        tempCountReqDelay+= (int)simclock % env_epoch_steps;
+        tempcountfirst++;
         add_into_cache(node, msg->request.request_static.cache);        
     	if (node->data->key == holder){  //if it's the holder node
             /*if (msg->request.request_static.chunkId != 0){  
@@ -652,7 +705,8 @@ void lunes_user_request_event_handler(hash_node_t *node, int forwarder, Msg *msg
                 lunes_send_tree_to_neighbor(node, msg->request.request_static.creator); 
             }
     	}
-    	else if (node->data->status == 1 || node->data->status == 2){ 
+    	// else if (node->data->status == 1 || node->data->status == 2 || node->data->status == 3){ //only for coverage tests
+        else if (node->data->status == 1 || node->data->status == 2 ){ //da cambiare dopo i test!
     		lunes_forward_to_neighbors(node, msg,  --(msg->request.request_static.ttl),  msg->request.request_static.cache, msg->request.request_static.chunkId, msg->request.request_static.creator, forwarder);
     	}
     }
@@ -664,7 +718,6 @@ void lunes_user_item_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
     if (node->data->status == 2){  //if it's the receiver node
         int chunkId = msg->item.item_static.chunkId;
         if (node->data->buffer[chunkId] == 0){
-            //countDelivers++;
             if (node->data->firstChunk == -1 || chunkId < node->data->firstChunk){
                 node->data->firstChunk = chunkId;
             }
@@ -672,7 +725,7 @@ void lunes_user_item_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
             int delay = ((int)simclock % env_epoch_steps) - startEmittingItems - msg->item.item_static.chunkId; //timesteps between generation of a message and its reception
             countDelay += delay;
             node->data->buffer[msg->item.item_static.chunkId] = 1;
-            for (int i = 0; i < numChildrenTree; i++){                      //for each possible child, if there is a child in the tree, send it to the child
+            for (int i = 0; i < numChildrenTree; i++){                          //for each possible child, if there is a child in the tree, send it to the child
                 int child_id = node->data->treeChildren[i];
                 if (child_id != -1){
                     hash_node_t * receiver = hash_lookup(stable, child_id);
@@ -680,7 +733,6 @@ void lunes_user_item_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
                         node->data->treeChildren[i] = -1;
                         //fprintf(stdout, "node %d detected the failure of node %d at %d\n", node->data->key, child_id, (int)simclock);  //LOG!
                     }else{
-                        //fprintf(stdout, "node %d detected the presence of node %d at %d\n", node->data->key, child_id, (int)simclock);
                         execute_item(simclock + FLIGHT_TIME, node, receiver,msg->item.item_static.chunkId);
                     }
                 }
@@ -690,7 +742,7 @@ void lunes_user_item_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
 }
 
 
-//If possible add the node with childId as ID as one of the 5 children. If the node already has 5 children, select one and proceed recursively.
+//If possible add the node with childId as ID as one of the n children. If the node already has n children, select one and proceed recursively.
 void lunes_user_tree_event_handler(hash_node_t *node, int forwarder, Msg *msg) {
     countTreeMessages++;
     if (addChildInTree (node, msg->tree.tree_static.childId) == -1){                 

@@ -27,6 +27,11 @@ while [[ $# -gt 0 ]]; do
     shift # past argument
     shift # past value
     ;;
+  -p| --prob)
+    PROB="$2"
+    shift # past argument
+    shift # past value
+    ;;
   -d | --debug)
     DEBUG="$2"
     echo "Debug value $DEBUG"
@@ -61,12 +66,12 @@ export MIGRATION=0
 export MFACTOR=1.2
 export LOAD=0
 export MAX_TTL=10
-export DISSEMINATION=0                         # 0 = BROADCAST, 7 = DDF2, DANDELIONPLUS = 6, DANDELION = 8, FIXED PROBABILITY = 1, DANDELION++ = 5
-export BROADCAST_PROB_THRESHOLD=100
-export FIXED_PROB_THRESHOLD=70
+export DISSEMINATION=1                        # 0 = BROADCAST, 7 = DDF2, FIXED PROBABILITY = 1, FIXED FANOUT = 4
+export BROADCAST_PROB_THRESHOLD=90
+export FIXED_PROB_THRESHOLD=100
 export PROBABILITY_FUNCTION=1
 export FUNCTION_COEFFICIENT=2
-export END_CLOCK=2000
+export END_CLOCK=10000
 export ACTIVE_PERC=80
 export EPOCH_STEPS=200
 
@@ -90,7 +95,7 @@ if [[ -z "$TEST" ]]; then
     echo "Starting SIMA (waiting for $NLP LPs)..."
     ./sima "$NLP" &
   fi
-  $DEBUG ./t_graph "$NLP" $SMH ${TRACE_DIRECTORY}/test_btc_ # > "res.txt" #"test_$ALG.$PROB.txt"
+  $DEBUG ./t_graph "$NLP" $SMH ${TRACE_DIRECTORY}/test_btc_  #$PROB # > "res/$PROB.txt" #"test_$ALG.$PROB.txt"
   echo "End time: $(date)"
   exit -1
 fi

@@ -1,26 +1,39 @@
-LUNES____[     50267]: MIGRATION, migration variable set to 0
-LUNES____[     50267]: MIGRATION is OFF
-LUNES____[     50267]: MFACTOR, migration factor: 1.200000
-LUNES____[     50267]: LOAD, load balancing: 0
-LUNES____[     50267]: LOAD, load balancing is OFF
-LUNES____[     50267]: END_CLOCK, number of steps in the simulation run -> 20000.000000
-LUNES____[     50267]: ACTIVE_PERC, initial percentage of active nodes -> 80
-LUNES____[     50267]: MAX_TTL, maximum time-to-live for messages in the network -> 20
-LUNES____[     50267]: DISSEMINATION, dissemination mode -> 0
-LUNES____[     50267]: BROADCAST_PROB_THRESHOLD, probability of the broadcast dissemination -> 70.000000
-ARTÌS-TS_[     50267]: initialization. ARTÌS version: 2.1.2 "New Kowloon"
-SIMA_____[     50267]: senecaurla bound to port 10200
-#LP [0] HOSTNAME [senecaurla]
-#                      LP[0] STARTED
-#
-#          Generating Simulated Entities from 0 To 499 ...  OK
-#
-# Data format:
-#	column 1:   elapsed time (seconds)
-#	column 2:   timestep
-#	column 3:   number of entities in this LP
-#	column 4:   number of migrating entities (from this LP)
-#	column 5:   local communication ratio (percentage)
-#	column 6:   remote communication ratio (percentage)
-#	column 7:   total number of migrations in this timestep
-#
+FP100, act=40, 
+An average of 10415.27 delivers out of 11438.12 chunks. An average of 1259801.84 requests messages, 11931.22 item messages, 204.31 tree messages
+ The average delay is: 2.941250 (total 1501061), chunk reception rate = 91.057473
+
+FP70, act=40
+An average of 10110.24 delivers out of 11414.10 chunks. An average of 930873.33 requests messages, 12024.39 item messages, 218.41 tree messages
+ The average delay is: 2.985668 (total 1479106), chunk reception rate = 88.576787
+
+An average of 10108.02 delivers out of 11218.16 chunks. An average of 824196.22 requests messages, 11473.96 item messages, 188.22 tree messages
+ The average delay is: 2.966069 (total 1469073), chunk reception rate = 90.104059
+
+FP60
+An average of 10351.18 delivers out of 11385.65 chunks. An average of 737742.12 requests messages, 11722.65 item messages, 194.65 tree messages
+ The average delay is: 2.963725 (total 1503225), chunk reception rate = 90.914273
+
+737742 * 0.06445 = 47549Mb = 46Gb reqM  11723Mb = 11.45Gb ItemM    12.57Mb treeM
+
+
+__________________________________________________________________________________________________________________________________________________________________________________________________________
+*********************************************************************************************************************************************************************************************************
+__________________________________________________________________________________________________________________________________________________________________________________________________________
+
+full broadcast 2000 nodes
+
+act120 --> 72	  62.9	 50.8
+act110
+act100 -->	  59.2	
+act90  --> 58.7
+act80  --> 56.4   51.8	  44
+act70  --> 51,8
+act60  --> 50,5   46.8	  38
+act50  --> 49.7
+act40  --> 45.4   38.9   32.8
+act30  --> 43
+act20  --> 42.3   35.4
+act10  --> 41.9   30	  31
+act0   --> 30.5   25.2	  20.1
+
+FP80

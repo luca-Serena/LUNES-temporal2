@@ -540,7 +540,7 @@ void user_environment_handler() {
     //
     switch (env_dissemination_mode) {
     case BROADCAST:                             //	probabilistic broadcast dissemination
-
+        
         //	Runtime configuration:	probability threshold of the broadcast dissemination
         env_broadcast_prob_threshold = atof(check_and_getenv("BROADCAST_PROB_THRESHOLD"));
         fprintf(stdout, "LUNES____[%10d]: BROADCAST_PROB_THRESHOLD, probability of the broadcast dissemination -> %f\n", local_pid, env_broadcast_prob_threshold);
@@ -550,7 +550,7 @@ void user_environment_handler() {
         break;
 
     case GOSSIP_FIXED_PROB:                     //	gossip with fixed probability
-
+        
         //	Runtime configuration:	probability threshold of the fixed probability dissemination
         env_fixed_prob_threshold = atof(check_and_getenv("FIXED_PROB_THRESHOLD"));
         fprintf(stdout, "LUNES____[%10d]: FIXED_PROB_THRESHOLD, probability of the fixed probability dissemination -> %f\n", local_pid, env_fixed_prob_threshold);

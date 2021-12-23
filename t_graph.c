@@ -434,7 +434,7 @@ int main(int argc, char *argv[]) {
     TESTNAME  = argv[3];        // Output directory for simulation traces
 
     if (argc > 4) {
-        //niente per ora
+        //env_fixed_prob_threshold = (float)atoi(argv[4]);
     }
 
     // Initialization of the random numbers generator
