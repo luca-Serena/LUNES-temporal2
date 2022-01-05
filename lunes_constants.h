@@ -14,9 +14,10 @@
 #define __LUNES_CONSTANTS_H
 
 //  General parameters
-#define CACHE_SIZE	500
-#define NUM_CHUNKS 	150
-#define NUM_CHILDREN   5
+#define CACHE_SIZE		500
+#define NUM_CHUNKS 		475
+#define NUM_TREE_CHILDREN  	5
+#define MAX_NEIGHBORS  	30
 
 //	Dissemination protocols
 #define BROADCAST                  0    // Probabilistic broadcast

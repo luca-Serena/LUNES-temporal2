@@ -98,8 +98,6 @@ hash_node_t *hash_insert(enum HASH_TYPE type, hash_t *tptr, struct hash_data_t *
     node->data->status = 1;
 
     // Init some values
-    node->data->internal_timer = 0;
-
     node->next      = tptr->bucket[h];
     tptr->bucket[h] = node;
     tptr->count    += 1;

@@ -26,11 +26,15 @@ void lunes_forward_to_neighbors(hash_node_t *, Msg *, unsigned short, cache_elem
 void lunes_user_request_event_handler(hash_node_t *, int, Msg *);
 void lunes_user_item_event_handler(hash_node_t *, int, Msg *);
 void lunes_user_tree_event_handler(hash_node_t *, int, Msg *);
-void lunes_user_broken_tree_event_handler(hash_node_t *, int, Msg *);
+void lunes_user_ping_event_handler(hash_node_t *, int, Msg *);
+void lunes_user_pong_event_handler(hash_node_t *, int, Msg *);
 void lunes_user_register_event_handler(hash_node_t *);
 void lunes_user_control_handler(hash_node_t *);
 
 // Support functions
-int cache_choose_oldest(hash_node_t*);
+int cache_choose_oldest (hash_node_t*);
+void deleteChildInTree (hash_node_t *, int);
+int count_neighbors(hash_node_t*);
+
 
 #endif /* __LUNES_H */

@@ -28,8 +28,7 @@ void user_notify_migration_event_handler();
 void user_notify_ext_migration_event_handler();
 void user_migration_event_handler(hash_node_t *, int, Msg *);
 void user_model_events_handler(int, int, Msg *, hash_node_t *);
-void user_link_event_handler(hash_node_t *, int);
-void user_unlink_event_handler(hash_node_t *, int);
+
 
 //	Other handlers
 void user_control_handler();
@@ -44,8 +43,8 @@ void user_shutdown_handler();
 int add_entity_state_entry(unsigned int, int, int, hash_node_t *);
 int delete_entity_state_entry(unsigned int, hash_node_t *);
 int modify_entity_state_entry(unsigned int, unsigned int, hash_node_t *);
-void execute_link(double, hash_node_t *, hash_node_t *);
-void execute_unlink(double, hash_node_t *, hash_node_t *);
+void execute_ping(double, hash_node_t *, int, int);
+void execute_pong(double, hash_node_t *, int, int);
 void execute_request(double, hash_node_t *, hash_node_t *, unsigned short, int, cache_element, unsigned int);
 void execute_tree(double, hash_node_t *, hash_node_t *, int);
 void execute_broken_tree(double, hash_node_t *, hash_node_t *);

@@ -21,8 +21,8 @@
 typedef struct _request_msg    RequestMsg; // Requesting chunks
 typedef struct _item_msg	ItemMsg;    // Sending chunks
 typedef struct _tree_msg	TreeMsg;    // Sending Neighbors contacts
-typedef struct _link_msg       LinkMsg;    // Network constructions
-typedef struct _unlink_msg     UnlinkMsg;  // Network constructions
+typedef struct _ping_msg       PingMsg;    // Network constructions
+typedef struct _pong_msg       PongMsg;  // Network constructions
 typedef struct _migr_msg       MigrMsg;    // Migration message
 typedef union   msg            Msg;
 
@@ -39,9 +39,7 @@ struct _request_static_part {
     unsigned short ttl;                     // Time-To-Live
     int            chunkId;                 // chunk number
     unsigned int   creator;                 // ID of the original sender of the message
-   // #ifdef DEGREE_DEPENDENT_GOSSIP_SUPPORT
     unsigned int   num_neighbors;           // Number of neighbors of forwarder
-    //#endif
 };
 //
 
@@ -70,49 +68,39 @@ struct _item_static_part {
     unsigned short ttl;                     // Time-To-Live
     int            chunkId;                 // Message Identifier
     unsigned int   creator;                 // ID of the original sender of the message
-   // #ifdef DEGREE_DEPENDENT_GOSSIP_SUPPORT
     unsigned int   num_neighbors;           // Number of neighbors of forwarder
-    //#endif
 };
 //
 
 struct _item_msg {
     struct  _item_static_part item_static;
 };
-// **********************************************
-// LINK MESSAGES
-// **********************************************
-/*! \brief Record definition for dynamic part of link messages */
-struct _link_record {
-    unsigned int key;
-    unsigned int value;
+
+
+struct _ping_static_part {
+    char           type;                    // Message type
+    unsigned int   creator;                 // ID of the original sender of the message
+    int	    is_first_ping;	     // 1 if it is the first ping, then add such a neighbor if possible
 };
 //
-/*! \brief Static part of link messages */
-struct _link_static_part {
-    char type; // Message type
-};
-//
-/*! \brief Link message */
-struct _link_msg {
-    struct  _link_static_part link_static; // Static part
+
+struct _ping_msg {
+    struct  _ping_static_part ping_static;
 };
 
-/*! \brief Record definition for dynamic part of unlink messages */
-struct _unlink_record {
-    unsigned int key;
-    unsigned int value;
+
+struct _pong_static_part {
+    char           type;                    // Message type
+    int            neighbor_type;          // 1 neighbor tree  ----  0 overlay neighbor
+    unsigned int   from;                    // ID of the original sender of the message
+    unsigned int   num_neighbors;           // Number of neighbors of forwarder
 };
 //
-/*! \brief Static part of unlink messages */
-struct _unlink_static_part {
-    char type; // Message type
+
+struct _pong_msg {
+    struct  _pong_static_part pong_static;
 };
-//
-/*! \brief unLink message */
-struct _unlink_msg {
-    struct  _unlink_static_part unlink_static; // Static part
-};
+
 
 
 // **********************************************
@@ -140,13 +128,13 @@ struct _migr_msg {
 
 /*! \brief Union structure for all types of messages */
 union msg {
-    char       type;
-    LinkMsg    link;
-    RequestMsg request;
-    MigrMsg    migr;
-    ItemMsg    item;
-    TreeMsg	tree;
-    UnlinkMsg  unlink;
+    char        type;
+    PingMsg     ping;
+    RequestMsg  request;
+    MigrMsg     migr;
+    ItemMsg     item;
+    TreeMsg     tree;
+    PongMsg     pong;
 };
 /*---------------------------------------------------------------------------*/
 

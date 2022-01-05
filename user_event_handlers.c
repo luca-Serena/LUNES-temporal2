@@ -73,49 +73,6 @@ extern int            env_epoch_steps;              /* Duration of a single epoc
 
 
 
-/* ************************************************************************ */
-/*       S U P P O R T     F U N C T I O N S			                    */
-/* ************************************************************************ */
-
-/* ***************************** D E B U G **********************************/
-
-/*! \brief Prints out the whole content of a glib hashtable data structure
- */
-void UNUSED hash_table_print(GHashTable *ht) {
-    // Iterator to scan the whole state hashtable of entities
-    GHashTableIter iter;
-    gpointer       key, value;
-
-    g_hash_table_iter_init(&iter, ht);
-
-    while (g_hash_table_iter_next(&iter, &key, &value)) {
-        fprintf(stdout, "DEBUG: %d:%d\n", *(unsigned int *)key, *(unsigned int *)value);
-        fflush(stdout);
-    }
-}
-
-/*! \brief Returns a random key from a hash table
- */
-gpointer  hash_table_random_key(GHashTable *ht) {
-    // Iterator to scan the (whole) state hashtable of entities
-    GHashTableIter iter;
-    gpointer       key, value;
-    guint          size;
-    unsigned int   position;
-
-    size     = g_hash_table_size(ht);
-    position = RND_Integer(S, (double)1, (double)size);
-
-    g_hash_table_iter_init(&iter, ht);
-
-    while (position) {
-        g_hash_table_iter_next(&iter, &key, &value);
-        position--;
-    }
-    return(key);
-}
-
-
 /*! \brief Utility to check environment variables, if the variable is not defined then the run is aborted
  */
 char *check_and_getenv(char *variable) {
@@ -128,72 +85,6 @@ char *check_and_getenv(char *variable) {
         exit(1);
     }else {
         return(value);
-    }
-}
-
-/* *********** E N T I T Y    S T A T E    M A N A G E M E N T **************/
-
-/*! \brief Adds a new entry in the hash table that implements the SE's local state
- *         Note: it is used both from the register and the migration handles
- */
-int add_entity_state_entry(unsigned int key, int val, int id, hash_node_t *node) {
-    struct  state_element *state_e;
-
-    // First of all, it is necessary to check if the used key is already in the hash table
-    if (g_hash_table_lookup(node->data->state, &key) != NULL) { return(-1); }
-
-    // The number of state records is limited by the MAX_MIGRATION_DYNAMIC_RECORDS constant,
-    //	that is the max number of records that can be inserted in a migration message
-    if (g_hash_table_size(node->data->state) > MAX_MIGRATION_DYNAMIC_RECORDS) {
-        // No more entries can be added, the resulting state would be impossible to migrate
-        fprintf(stdout, "%12.2f node: FATAL ERROR, [%5d] impossible to add new elements to the state hash table of this node, see constant MAX_MIGRATION_DYNAMIC_RECORDS in file: sim-parameters.h\n", simclock, id);
-        fflush(stdout);
-        exit(-1);
-    }
-
-    // Dynamic allocation of memory and initialization of values
-    // Note: this memory will be automatically freed in case of SE migration
-    state_e = g_malloc(sizeof(struct state_element));
-    if (state_e) {
-        state_e->key      = key;
-        state_e->value    = val;
-
-        g_hash_table_insert(node->data->state, &(state_e->key), &(state_e->value));
-
-        #ifdef DEBUG
-        fprintf(stdout, "%12.2f node: [%5d] local state key: %d, local hash_size: %d\n", simclock, id, state_e->key, g_hash_table_size(node->data->state));
-        fflush(stdout);
-        #endif
-        return(1);
-    }else {
-        // Unable to allocate memory for state elements
-        fprintf(stdout, "%12.2f node: FATAL ERROR, [%5d], memory allocation, impossible to add new elements to the state hash table of this node\n", simclock, id);
-        fflush(stdout);
-        exit(-1);
-    }
-}
-
-/*! \brief Deletes an entry in the hash table that implements the SE's local state
- *         Note: the freeing of the associated memory is automatic
- */
-int delete_entity_state_entry(unsigned int key, hash_node_t *node) {
-    if (g_hash_table_remove(node->data->state, &key) == TRUE) { return(0); }else {
-        return(-1);
-    }
-}
-
-/*! \brief Modifies the value of an entry in the SE's local state
- */
-int modify_entity_state_entry(unsigned int key, unsigned int new_value, hash_node_t *node) {
-    unsigned int *value;
-
-    value = g_hash_table_lookup(node->data->state, &key);
-
-    if (value) {
-        *(value) = new_value;
-        return(0);
-    }else {
-        return(-1);
     }
 }
 
@@ -220,7 +111,6 @@ void execute_request(double ts, hash_node_t *src, hash_node_t *dest, unsigned sh
     if (ttl > 0){
         GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
     }
-    // Real send
 }
 
 void execute_item(double ts, hash_node_t *src, hash_node_t *dest, int item_id) {
@@ -262,12 +152,15 @@ void execute_tree(double ts, hash_node_t *src, hash_node_t *dest,  int child_id)
 }
 
 
-void execute_broken_tree(double ts, hash_node_t *src, hash_node_t *dest) {
-    TreeMsg  msg;
+
+void execute_ping(double ts, hash_node_t *src, int dest, int is_first) {
+    PingMsg  msg;
     unsigned int message_size;
 
     // Defining the message type
-    msg.tree_static.type = 'B';
+    msg.ping_static.type = 'P';
+    msg.ping_static.creator = src->data->key;
+    msg.ping_static.is_first_ping = is_first;
     message_size = sizeof(struct _tree_static_part);
 
     // Buffer check
@@ -276,23 +169,24 @@ void execute_broken_tree(double ts, hash_node_t *src, hash_node_t *dest) {
         fflush(stdout);
         exit(-1);
     }
-        GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
+        GAIA_Send(src->data->key, dest, ts, (void *)&msg, message_size);
 }
 
-
-/*! \brief Links another SE, creating and sending a 'L' type message
- *         In LUNES it is used to build up the graph structure that has been read
- *         from the input graph definition file (in dot format).
- */
-void execute_link(double ts, hash_node_t *src, hash_node_t *dest) {
-    LinkMsg      msg;
+void execute_pong(double ts, hash_node_t *src, int dest,  int cardinality) {
+    PongMsg  msg;
     unsigned int message_size;
 
     // Defining the message type
-    msg.link_static.type = 'L';
+    msg.pong_static.type = 'O';
+    msg.pong_static.num_neighbors = cardinality;
+    msg.pong_static.from = src->data->key;
+    message_size = sizeof(struct _tree_static_part);
 
-    // To reduce the network overhead, only the used part of the message is really sent
-    message_size = sizeof(struct _link_static_part);
+    if (cardinality == -2){
+        msg.pong_static.neighbor_type = 'T';
+    } else {
+        msg.pong_static.neighbor_type = 'O';
+    }
 
     // Buffer check
     if (message_size > BUFFER_SIZE) {
@@ -300,31 +194,9 @@ void execute_link(double ts, hash_node_t *src, hash_node_t *dest) {
         fflush(stdout);
         exit(-1);
     }
-
-    // Real send
-    GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
+        GAIA_Send(src->data->key, dest, ts, (void *)&msg, message_size);
 }
 
-void execute_unlink(double ts, hash_node_t *src, hash_node_t *dest) {
-    UnlinkMsg      msg;
-    unsigned int message_size;
-
-    // Defining the message type
-    msg.unlink_static.type = 'U';
-
-    // To reduce the network overhead, only the used part of the message is really sent
-    message_size = sizeof(struct _unlink_static_part);
-
-    // Buffer check
-    if (message_size > BUFFER_SIZE) {
-        fprintf(stdout, "%12.2f FATAL ERROR, the outgoing BUFFER_SIZE is not sufficient!\n", simclock);
-        fflush(stdout);
-        exit(-1);
-    }
-
-    // Real send
-    GAIA_Send(src->data->key, dest->data->key, ts, (void *)&msg, message_size);
-}
 
 /* ************************************************************************ */
 /*      U S E R   E V E N T   H A N D L E R S			                    */
@@ -333,80 +205,6 @@ void execute_unlink(double ts, hash_node_t *src, hash_node_t *dest) {
 /*		then it calls another user level handerl called		                */
 /*		lunes_<handler_name> and placed in the file lunes.c	                */
 /* ************************************************************************ */
-
-
-/****************************************************************************
- *! \brief LINK: upon arrival of a link request some tasks have to be executed
- */
-void user_link_event_handler(hash_node_t *node, int id) {
-
-    // Adding a new entry in the local state of the registering node || first entry	= key || second entry = value ||  no duplicates are allowed
-    if (add_entity_state_entry(id, id, node->data->key, node) == -1) {
-        // Insertion aborted, the key is already in the hash table
-        /*fprintf(stdout, "%12.2f node: FATAL ERROR, [%5d] key %d (value %d) is a duplicate and can not be inserted in the hash table of local state\n", simclock, node->data->key, id, id);
-        fflush(stdout);
-        exit(-1);*/
-    } else {
-   		node->data->num_neighbors++;
-   	}
-    #ifdef AG_DEBUG
-    fprintf(stdout, "%12.2f node: [%5d] received a link request from agent [%5d], total received requests: %d\n", simclock, node->data->key, id, g_hash_table_size(node->data->state));
-    #endif
-}
-
-
-void user_unlink_event_handler(hash_node_t *node, int id) {
-    delete_entity_state_entry(id, node);
-    if (node->data->num_neighbors > 0){
-    	node->data->num_neighbors --;
-	}
-}
-
-
-/*****************************************************************************
- *! \brief REGISTER: a new SE (in this LP) has been created, now it is possibile to
- *         initialize its data structures (es. local state)
- */
-void user_register_event_handler(hash_node_t *node, int id) {
-    // Initializing the local data structures of the node
-    node->data->state = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
-    // Calling the appropriate LUNES user level handler
-}
-
-/*****************************************************************************
- *      NOTIFY MIGRATION: a local SE will be migrated in another LP.
- *      This notification is reported to the user level but usually nothing
- *      has to be done
- */
-void user_notify_migration_event_handler() {
-    // Nothing to do
-}
-
-/*****************************************************************************
- *! \brief NOTIFY EXTERNAL MIGRATION: SEs that are allocated in other LPs are going
- *      to be migrated, this LP is notified of this update but the user level
- *      usually does not care of it
- */
-void  user_notify_ext_migration_event_handler() {
-    // Nothing to do
-}
-
-/*****************************************************************************
- *! \brief MIGRATION: migration-event manager (the real migration handler)
- *         A new migration message for this LP has been received, the trasported SE has
- *         been created and inserted in the data structures. Now it is necessary to
- *         perform some user level tasks such as taking care of de-serializing the
- *         SE's local state
- */
-void user_migration_event_handler(hash_node_t *node, int id, Msg *msg) {
-    // Initializing the local data structures of the node
-    node->data->state = g_hash_table_new_full(g_int_hash, g_int_equal, g_free, NULL);
-
-    // The migration message contains the state of the migrating SE,
-    //	after allocating space to locally manage the node, I've
-    //	to update now the state of the SE using the state
-    //	information contained in the migration message
-}
 
 /*****************************************************************************
  *! \brief CONTROL: at each timestep, the LP calls this handler to permit the execution
@@ -463,14 +261,11 @@ void user_model_events_handler(int to, int from, Msg *msg, hash_node_t *node) {
     case 'T':
         lunes_user_tree_event_handler(node, from, msg);
         break;
-    case 'B':
-        lunes_user_broken_tree_event_handler(node, from, msg);
+    case 'P':
+        lunes_user_ping_event_handler(node, from, msg);
         break;
-    case 'L':
-        user_link_event_handler(node, from);
-        break;
-    case 'U':
-        user_unlink_event_handler(node, from);
+    case 'O':
+        lunes_user_pong_event_handler(node, from, msg);
         break;
 
     default:

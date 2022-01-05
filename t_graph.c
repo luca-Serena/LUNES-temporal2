@@ -130,107 +130,6 @@ static void Generate(int count) {
         //      see in the following of this source file
     }
 }
-
-/*! \brief Performs the migration of the flagged Simulated Entities
- */
-static int UNUSED ScanMigrating() {
-    // Current entity
-    struct hash_node_t *se = NULL;
-
-    // Migration message
-    MigrMsg m;
-
-    // Number of entities migrated in this step, in this LP
-    int migrated_in_this_step = 0;
-
-    // Cursor used for the local state of entities
-    int state_position;
-
-    // Total size of the message that will be sent
-    unsigned int message_size;
-
-    // Iterator to scan the whole state hashtable of entities
-    GHashTableIter iter;
-    gpointer       key, value;
-
-
-    // The SEs to migrate have been already identified by GAIA
-    //  and placed in the migration list (mlist) when the
-    //  related NOTIF_MIGR was received
-    while ((se = list_del(mlist))) {
-        // Statistics
-        migrated_in_this_step++;
-
-        // A new "M" (migration) type message is created
-        m.migration_static.type = 'M';
-
-        // The state of each IA is composed of a set of elements
-        //  let's start from the first one
-        state_position = 0;
-
-        // Dynamic part of the agents state
-        //
-        // The hashtable is empty
-        if (se->data->state == NULL) {
-            #ifdef DEBUG
-            fprintf(stdout, "ID: %d is empty\n", se->data->key);
-            fflush(stdout);
-            #endif
-        }
-
-        // Copying the local state of the migrating entity in the payload of the migration message
-        //  for each record in the entity state a new record is appended in the dynamic part
-        //  of the migration message
-        if (se->data->state != NULL) {
-            #ifdef DEBUG
-            int tmp = 0;
-            #endif
-
-            // Hashtable iterator
-            g_hash_table_iter_init(&iter, se->data->state);
-
-            while (g_hash_table_iter_next(&iter, &key, &value)) {
-                m.migration_dynamic.records[state_position].key      = *(unsigned int *)key;
-                m.migration_dynamic.records[state_position].value = *(unsigned int *)value;
-                #ifdef DEBUG
-                tmp++;
-
-                fprintf(stdout, "%12.2f node: [%5d] migration, copied key: %d, (%4d/%4d)\n", simclock, se->data->key, m.migration_dynamic.records[state_position].key, tmp, g_hash_table_size(se->data->state));
-
-                fflush(stdout);
-                #endif
-
-                state_position++;
-            }
-        }
-
-        // It is time to clean up the hash table of the migrated node
-        if (se->data->state != NULL) {
-            // In the hash table creation it has been provided the cleaning function that is g_free ()
-            g_hash_table_destroy(se->data->state);
-        }
-
-        // Calculating the real size of the migration message
-        message_size = sizeof(struct _migration_static_part);
-
-        if (message_size >= BUFFER_SIZE) {
-            // I'm trying to send a message that is larger than the buffer
-            fprintf(stdout, "%12.2f node: FATAL ERROR, trying to send a message (migration) that is larger than: %d !\n", simclock, BUFFER_SIZE);
-            fflush(stdout);
-            exit(-1);
-        }
-
-        // The migration is really executed
-        GAIA_Migrate(se->data->key, (void *)&m, message_size);
-
-        // Removing the migrated SE from the local list of migrating nodes
-        hash_delete(LSE, stable, se->data->key);
-    }
-
-    // Returning the number of migrated SE (for statistics)
-    return(migrated_in_this_step);
-}
-
 /*---------------------------------------------------------------------------*/
 
 /* ************************************************************************ */
@@ -267,8 +166,6 @@ static void register_event_handler(int id, int lp) {
         // If the SMH is local then it has to be inserted also in the local
         //  hashtable and some extra management is required
         if (lp == LPID) {
-            // Call the appropriate user event handler
-            user_register_event_handler(node, id);
 
             // Inserting it in the table of local SEs
             if (!hash_insert(LSE, stable, node->data, node->data->key, LPID)) {
@@ -297,19 +194,13 @@ static void notify_migration_event_handler(int id, int to) {
     fprintf(stdout, "%12.2f agent: [%5d] is going to be migrated to LP [%5d]\n", simclock, id, to);
     #endif
 
-    // The GAIA framework has decided that a local SE has to be migrated,
-    //  the migration can NOT be executed immediately because the SE
+    // The GAIA framework has decided that a local SE has to be migrated, the migration can NOT be executed immediately because the SE
     //  could be the destination of some "in flight" messages
     if ((node = hash_lookup(table, id)))  {
         /* Now it is updated the list of SEs that are enabled to migrate (flagged) */
         list_add(mlist, node);
-
         node->data->lp = to;
-        // Call the appropriate user event handler
-        user_notify_migration_event_handler();
     }
-    // Just before the end of the current timestep, the migration list will be emptied
-    //  and the pending migrations will be executed
 }
 
 /*! \brief Manages the "migration notification" of external SEs
@@ -318,13 +209,10 @@ static void notify_migration_event_handler(int id, int to) {
 static void notify_ext_migration_event_handler(int id, int to) {
     hash_node_t *node;
 
-    // A migration that does not directly involve the local LP is going to happen in
-    //  the simulation. In some special cases the local LP has to take care of
-    //  this information
+    // A migration that does not directly involve the local LP is going to happen in the simulation. 
+    //In some special cases the local LP has to take care of this information
     if ((node = hash_lookup(table, id)))  {
         node->data->lp = to;                // Destination LP of the migration
-        // Call the appropriate user event handler
-        user_notify_ext_migration_event_handler();
     }
 }
 
@@ -342,9 +230,6 @@ static void  migration_event_handler(int id, Msg *msg) {
     if ((node = hash_lookup(table, id))) {
         // Inserting the new SE in the local table
         hash_insert(LSE, stable, node->data, node->data->key, LPID);
-
-        // Call the appropriate user event handler
-        user_migration_event_handler(node, id, msg);
     }
 }
 
@@ -525,7 +410,7 @@ int main(int argc, char *argv[]) {
 
     /* Main simulation loop, receives messages and calls the handler associated with them */
     while (!end_reached) {
-        // Max size of the next message.
+        // Max size of the next message. 
         //  after the receive the variable will contain the real size of the message
         max_data = BUFFER_SIZE;
 
@@ -533,18 +418,14 @@ int main(int argc, char *argv[]) {
         msg_type = GAIA_Receive(&from, &to, &Ts, (void *)data, &max_data);
         msg      = (Msg *)data;
 
-        // A message has been received, process it (calling appropriate handler)
-        //  message handlers
+        // A message has been received, process it (calling appropriate handler) message handlers
         switch (msg_type) {
-        // The migration of a locally managed SE has to be done,
-        //  calling the appropriate handler to insert the SE identifier
-        //  in the list of pending migrations
+        // The migration of a locally managed SE has to be done, calling the appropriate handler to insert the SE identifier in the list of pending migrations
         case NOTIF_MIGR:
             notify_migration_event_handler(from, to);
             break;
 
-        // A migration has been executed in the simulation but the local
-        //  LP is not directly involved in the migration execution
+        // A migration has been executed in the simulation but the local LP is not directly involved in the migration execution
         case NOTIF_MIGR_EXT:
             notify_ext_migration_event_handler(from, to);
             break;
@@ -554,11 +435,8 @@ int main(int argc, char *argv[]) {
             register_event_handler(from, to);
             break;
 
-        // The local LP is the receiver of a migration and therefore a new
-        //  SE has to be managed in this LP. The handler is responsible
-        //  to allocate the necessary space in the LP data structures
-        //  and in the following to copy the SE state that is contained
-        //  in the migration message
+        // The local LP is the receiver of a migration and therefore a new SE has to be managed in this LP. The handler is responsible
+        //  to allocate the necessary space in the LP data structures and in the following to copy the SE state that is contained in the migration message
         case EXEC_MIGR:
             migration_event_handler(from, msg);
             break;
@@ -582,10 +460,8 @@ int main(int argc, char *argv[]) {
                     Generate_Computation_and_Interactions(NSIMULATE * NLP);
                 }
 
-                // The pending migration of "flagged" SEs has to be executed,
-                //  the SE to be migrated were previously inserted in the migration
-                //  list due to the receiving of a "NOTIF_MIGR" message sent by
-                //  the GAIA framework
+                // The pending migration of "flagged" SEs has to be executed, the SE to be migrated were previously inserted in the migration
+                //  list due to the receiving of a "NOTIF_MIGR" message sent by the GAIA framework
                 //migrated_in_this_step = ScanMigrating();
 
                 // The LP that manages statistics prints out them
